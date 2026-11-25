@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Wishing Well",
-    "description": "A cross-session kanban board in the left navigation (Wishes / Plan / In progress / Local check / PR·CI / Staging / Ready to ship / Shipped). New sessions get a card automatically, which advances with edits, PRs, CI, Greptile, and merges; cards that need you are highlighted and raise a system notification. Agents report progress with the kanban tool."
+    "description": "Open Wishing Well from the sidebar to see a cross-session board or browse projects by stage and what needs you. New sessions get a card automatically, and cards advance with edits, PRs, CI, Greptile, and merges. Cards that need you are highlighted and raise a system notification. Agents report progress with the kanban tool."
   }
 }
