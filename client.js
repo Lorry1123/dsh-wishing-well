@@ -694,6 +694,21 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Menu glyphs drawn to the host's primitive icon spec: 16px viewBox, stroke
+     * width 1, round caps and joins, currentColor.
+     */
+    const GLYPH = { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }
+    const MENU_GLYPHS = {
+      // Three board columns of different heights: move to a stage.
+      'kanban.menu.move': () => h('svg', GLYPH,
+        h('rect', { x: 2.25, y: 2.25, width: 3, height: 11.5, rx: 1 }),
+        h('rect', { x: 6.5, y: 2.25, width: 3, height: 7.5, rx: 1 }),
+        h('rect', { x: 10.75, y: 2.25, width: 3, height: 9.5, rx: 1 })),
+      'kanban.menu.add': () => h('svg', GLYPH, h('circle', { cx: 8, cy: 8, r: 6.25 }), h('path', { d: 'M8 5v6M5 8h6' })),
+      'kanban.menu.remove': () => h('svg', GLYPH, h('circle', { cx: 8, cy: 8, r: 6.25 }), h('path', { d: 'M5 8h6' })),
+    }
+
+    /**
      * Session context-menu actions: a submenu of every stage, the next one in
      * bold and the current one disabled, plus removal; an untracked Session
      * gets an add submenu instead, with the plan stage suggested.
@@ -715,6 +730,7 @@ window.__ModuleLoader__.load({
         return [{
           id: 'add',
           label: '加入许愿池',
+          icon: { key: 'kanban.menu.add' },
           separatorBefore: true,
           children: COLUMNS.map(column => stage(column, {
             next: column.id === 'plan',
@@ -727,6 +743,7 @@ window.__ModuleLoader__.load({
         {
           id: 'move',
           label: '移动到许愿阶段',
+          icon: { key: 'kanban.menu.move' },
           separatorBefore: true,
           children: COLUMNS.map((column, i) => stage(column, {
             current: i === index,
@@ -734,7 +751,7 @@ window.__ModuleLoader__.load({
             run: () => settle(store.mutate('update', { id: card.id, column: column.id })),
           })),
         },
-        { id: 'remove', label: '移除出许愿池', failureLabel: MENU_FAILURE, run: () => settle(store.mutate('remove', { id: card.id })) },
+        { id: 'remove', label: '移除出许愿池', icon: { key: 'kanban.menu.remove' }, failureLabel: MENU_FAILURE, run: () => settle(store.mutate('remove', { id: card.id })) },
       ]
     }
 
@@ -819,6 +836,9 @@ window.__ModuleLoader__.load({
           for (const tone of TONES) {
             yield ctx.slots.register({ name: 'contextMenu.icon', key: `kanban.stage.${tone}` }, stageIcon(tone, false))
             yield ctx.slots.register({ name: 'contextMenu.icon', key: `kanban.stage.${tone}.next` }, stageIcon(tone, true))
+          }
+          for (const [key, Glyph] of Object.entries(MENU_GLYPHS)) {
+            yield ctx.slots.register({ name: 'contextMenu.icon', key }, Glyph)
           }
         })
       },
