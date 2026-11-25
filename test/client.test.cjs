@@ -122,6 +122,16 @@ assert.ok([...plugin.inject].includes('contextMenus'))
 assert.deepEqual(Object.keys(registered).sort(), ['main', 'sidebar.panellist', 'sidebar.session.row.hover', 'sidebar.session.row.trailing'])
 assert.equal(menuContributions.length, 1)
 assert.equal(menuContributions[0].target, 'session')
+// Placement among the built-in Session contributions of ui-workspace and
+// ui-open-in-app, sorted the way the menu registry sorts: order, then id.
+const builtIn = [
+  { id: 'session.pin', order: 100 }, { id: 'session.rename', order: 200 }, { id: 'session.fork', order: 300 },
+  { id: 'session.id', order: 450, separatorBefore: true }, { id: 'open-in-app.openWith', order: 500 },
+  { id: 'session.archive', order: 600, separatorBefore: true },
+]
+const sorted = [...builtIn, { id: menuContributions[0].id, order: menuContributions[0].order }]
+  .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)).map(c => c.id)
+assert.deepEqual(sorted, ['session.pin', 'session.rename', 'session.fork', 'kanban', 'session.id', 'open-in-app.openWith', 'session.archive'])
 assert.deepEqual(Object.keys(menuIcons).sort(), ['business', 'idle', 'ready', 'success', 'warn'].flatMap(t => [`kanban.stage.${t}`, `kanban.stage.${t}.next`]).sort())
 assert.equal(registered['sidebar.panellist'].def.label, '许愿池')
 const withStore = name => ({ ...registered[name].def.inject(), store: fakeStore })
@@ -253,7 +263,7 @@ const refreshFromHost = async () => { for (const handler of focusHandlers) handl
   const resolveMenu = target => menuContributions[0].resolve(target, new AbortController().signal)
   // Tracked session in 待验收 (k-2 moved there above): every stage, current disabled, next (PR·CI) marked.
   let actions = await resolveMenu({ sessionId: 's-1', displayTitle: '导出会话' })
-  assert.deepEqual(actions.map(a => a.label), ['移到看板阶段', '从看板移除'])
+  assert.deepEqual(actions.map(a => a.label), ['移动到许愿阶段', '移除出许愿池'])
   assert.equal(actions[0].separatorBefore, true)
   const stages = actions[0].children
   assert.deepEqual(stages.map(s => s.label), ['许愿池', '方案', '开发中', '待验收（当前）', 'PR·CI', 'Staging', '待上线', '已上线'])
@@ -269,7 +279,8 @@ const refreshFromHost = async () => { for (const handler of focusHandlers) handl
   assert.deepEqual(posted.at(-1), { op: 'remove', args: { id: 'k-2' } })
   // Untracked session: an add submenu with the plan stage suggested.
   actions = await resolveMenu({ sessionId: 's-new', displayTitle: '新会话' })
-  assert.deepEqual(actions.map(a => a.label), ['加入看板'])
+  assert.deepEqual(actions.map(a => a.label), ['加入许愿池'])
+  assert.equal(actions[0].separatorBefore, true)
   assert.deepEqual(actions[0].children.filter(s => s.icon.key.endsWith('.next')).map(s => s.id), ['plan'])
   assert.ok(actions[0].children.every(s => s.disabled === undefined))
   await actions[0].children[2].run()

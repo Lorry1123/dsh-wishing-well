@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-wishing-well",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Wishing Well: a cross-session kanban board for DeepSeek Harness, with a left-navigation board page, Session-row stage labels, and a kanban tool for agents.",
   "type": "module",

@@ -677,7 +677,14 @@ window.__ModuleLoader__.load({
     }
 
     const TONES = [...new Set(COLUMNS.map(column => column.tone))]
-    const MENU_FAILURE = '看板更新失败，请重试'
+    const MENU_FAILURE = '许愿池更新失败，请重试'
+    /**
+     * The built-in Session menu groups pin/rename/fork (100–300), then
+     * copy-id/open-in-app (450–500, opened by a separator), then archive (600).
+     * 400 gives the wishing-well actions their own group between the first two
+     * without splitting either.
+     */
+    const MENU_ORDER = 400
 
     /** Icon of one stage item: a dot in the column's tone, marked when it is the next step. */
     function stageIcon(tone, next) {
@@ -707,7 +714,7 @@ window.__ModuleLoader__.load({
       if (card === undefined) {
         return [{
           id: 'add',
-          label: '加入看板',
+          label: '加入许愿池',
           separatorBefore: true,
           children: COLUMNS.map(column => stage(column, {
             next: column.id === 'plan',
@@ -719,7 +726,7 @@ window.__ModuleLoader__.load({
       return [
         {
           id: 'move',
-          label: '移到看板阶段',
+          label: '移动到许愿阶段',
           separatorBefore: true,
           children: COLUMNS.map((column, i) => stage(column, {
             current: i === index,
@@ -727,7 +734,7 @@ window.__ModuleLoader__.load({
             run: () => settle(store.mutate('update', { id: card.id, column: column.id })),
           })),
         },
-        { id: 'remove', label: '从看板移除', failureLabel: MENU_FAILURE, run: () => settle(store.mutate('remove', { id: card.id })) },
+        { id: 'remove', label: '移除出许愿池', failureLabel: MENU_FAILURE, run: () => settle(store.mutate('remove', { id: card.id })) },
       ]
     }
 
@@ -805,7 +812,7 @@ window.__ModuleLoader__.load({
         ctx.effect(() => ctx.contextMenus.register({
           id: 'kanban',
           target: 'session',
-          order: 300,
+          order: MENU_ORDER,
           resolve: target => sessionMenuActions(store, target),
         }), 'kanban: session context menu')
         ctx.slots.inject('contextMenu.icon', function* () {
