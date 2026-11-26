@@ -90,12 +90,13 @@ function viewScript(urls) {
 
 /**
  * Run gh for the given PR URLs.
+ * @param options - `{ distro }`: the WSL distribution on Windows; undefined uses the default one.
  * @returns parsed answers; a PR gh could not read carries `error: true`.
  */
 export function fetchPrs(urls, { distro }) {
   const script = viewScript(urls)
   const [command, args] = process.platform === 'win32'
-    ? ['wsl.exe', ['-d', distro, '--', 'bash', '-lc', `echo ${Buffer.from(script).toString('base64')} | base64 -d | bash`]]
+    ? ['wsl.exe', [...(distro === undefined ? [] : ['-d', distro]), '--', 'bash', '-lc', `echo ${Buffer.from(script).toString('base64')} | base64 -d | bash`]]
     : ['bash', ['-lc', script]]
   return new Promise((resolve, reject) => {
     execFile(command, args, { windowsHide: true, timeout: COMMAND_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024, encoding: 'utf8' }, (error, stdout) => {

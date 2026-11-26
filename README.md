@@ -18,6 +18,7 @@ DeepSeek Harness（DSH）的跨会话看板插件。每个会话对应一张卡�
 ## 功能
 
 - **看板页**：左侧导航里的整页看板，支持拖动、编辑、删除卡片；导航图标上显示等你处理的数量。
+- **项目视图**：按项目汇总未完成数和待你处理数，点项目名看该项目的看板。卡片优先用填写的项目名，没填时按关联会话的目录推断（标“推断”），推断不出归“未归类”。
 - **会话行标签**：会话列表每一行显示所在阶段，悬停可看当前状态。
 - **会话右键菜单**：把会话加入许愿池、移动到其他阶段，或移出许愿池。
 - **系统通知**：卡片开始需要你处理时（待验收、CI 失败、Greptile ≤3 分、可以合并、agent 等你回复、Staging 超过 6 小时无进展等）弹浏览器通知，点击通知打开对应会话。
@@ -37,7 +38,7 @@ DeepSeek Harness（DSH）的跨会话看板插件。每个会话对应一张卡�
 
 ### GitHub 轮询
 
-用本机已登录的 `gh` 读取 PR 状态、CI（`statusCheckRollup`）以及 Greptile summary 评论中的 `Confidence Score` 和 `Last reviewed commit`。Windows 上通过 `wsl.exe -d <发行版>` 在 WSL 里运行 `gh`。每分钟检查一次，CI 进行中的 PR 每 2 分钟、其余每 5 分钟查询一次，每次最多 20 个 PR。Greptile 评分对应的不是当前 head 时标记为过期。
+用本机已登录的 `gh` 读取 PR 状态、CI（`statusCheckRollup`）以及 Greptile summary 评论中的 `Confidence Score` 和 `Last reviewed commit`。Windows 上通过 `wsl.exe` 在 WSL 里运行 `gh`（发行版见下方配置 `wslDistro`）。每分钟检查一次，CI 进行中的 PR 每 2 分钟、其余每 5 分钟查询一次，每次最多 20 个 PR。Greptile 评分对应的不是当前 head 时标记为过期。
 
 ## `kanban` 工具
 
@@ -74,12 +75,19 @@ agent 可调用的工具，`action` 取值：
 
 ### 配置
 
-Host 插件 `kanban` 接受两项可选配置：
+本机配置写在插件目录下的 `config.json`（已被 git 忽略），格式见 [config.example.json](config.example.json)：
+
+```sh
+cp config.example.json config.json
+```
 
 | 字段 | 默认值 | 说明 |
 |---|---|---|
 | `file` | `~/.dsh/kanban/board.json` | 看板数据文件 |
-| `wslDistro` | `Ubuntu-22.04` | Windows 上运行 `gh` 的 WSL 发行版 |
+| `wslDistro` | WSL 默认发行版 | Windows 上运行 `gh` 的 WSL 发行版 |
+| `issueExample` | `ENG-123` | `kanban` 工具参数说明里的 issue 编号示例，填你团队的前缀，帮助 agent 识别 |
+
+各字段留空或缺省时用默认值。也可以在 profile 的 `cordis.patch.yml` 里给 `kanban` 这一行写 `config`，同名字段优先于 `config.json`。修改后需重新加载插件或重启 DSH 生效。
 
 ## 数据
 
@@ -94,6 +102,7 @@ Host 插件 `kanban` 接受两项可选配置：
 | [github.js](github.js) | 通过 `gh` 轮询 PR、CI、Greptile 状态并推进卡片 |
 | [client.js](client.js) | Web 端：看板页、会话行标签、右键菜单、通知 |
 | [locale/](locale) | 插件名称与描述（中 / 英） |
+| [config.example.json](config.example.json) | 本机配置示例，复制为 `config.json` 使用 |
 
 ## 测试
 

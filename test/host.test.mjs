@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { attentionOf, presentBoard } from '../board.js'
 import { advanceFromPrs, parseGreptile, prStateOf, startGitHubPolling, summarizeChecks } from '../github.js'
-import { apply, createdIssue, createdPrUrls, inject, name } from '../index.js'
+import { apply, createdIssue, createdPrUrls, inject, name, readLocalConfig } from '../index.js'
 
 assert.equal(name, 'kanban')
 assert.deepEqual(inject, ['connection', 'tools'])
@@ -40,7 +40,7 @@ assert.equal(createdIssue({ ...linearCall, args: { id: 'ENG-1', title: 'edit' } 
 assert.equal(createdIssue({ name: 'Read', args: {} }, 'ENG-1'), undefined)
 
 // ---------- mount with a fake context ----------
-function mount(file, fetchPrs = async () => []) {
+function mount(file, fetchPrs = async () => [], extra = {}) {
   const mounted = { route: undefined, tool: undefined, warnings: [], listeners: {}, effects: [] }
   const ctx = {
     effect: (fn) => { mounted.effects.push(fn()) },
@@ -50,7 +50,7 @@ function mount(file, fetchPrs = async () => []) {
     on: (event, listener) => { mounted.listeners[event] = listener },
     get: name => (name === 'sessionTitle' ? { get: () => undefined } : undefined),
   }
-  apply(ctx, { file, fetchPrs })
+  apply(ctx, { file, fetchPrs, ...extra })
   mounted.emit = (session, type, data) => mounted.listeners['session/event'](session, { type, data })
   mounted.board = async () => (await (await mounted.route.fetch(new Request('http://x/api/kanban/board'))).json()).board
   mounted.call = async (op, args) => {
@@ -62,6 +62,19 @@ function mount(file, fetchPrs = async () => []) {
   return mounted
 }
 const human = text => ({ source: { kind: 'user' }, content: [{ type: 'text', text }] })
+
+// ---------- local config ----------
+assert.deepEqual(readLocalConfig(join(dir, 'missing.json')), {})
+await writeFile(join(dir, 'local.json'), '{"wslDistro":"Debian","issueExample":"OPS-9"}')
+assert.deepEqual(readLocalConfig(join(dir, 'local.json')), { wslDistro: 'Debian', issueExample: 'OPS-9' })
+await writeFile(join(dir, 'array.json'), '[]')
+assert.throws(() => readLocalConfig(join(dir, 'array.json')), /must hold a JSON object/)
+{
+  // A row config value wins over config.json and the default.
+  const m = mount(join(dir, 'config-board.json'), undefined, { issueExample: 'OPS-7' })
+  assert.match(m.tool.parameters.properties.issue.description, /such as OPS-7\./)
+  m.dispose()
+}
 
 // ---------- automatic lifecycle from Session events ----------
 const file = join(dir, 'board.json')

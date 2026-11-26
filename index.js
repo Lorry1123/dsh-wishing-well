@@ -8,8 +8,10 @@
  * verification, a created PR enters PR·CI, and GitHub polling follows CI,
  * Greptile, and merges.
  */
+import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   addPrs, BoardError, BoardStore, cardForSession, COLUMNS, COLUMN_LABELS, createCard, findCard, GATES, moveCard,
   OPERATIONS, parsePrUrl, presentBoard, UNCHANGED,
@@ -21,7 +23,9 @@ export const inject = ['connection', 'tools']
 
 const ROUTE = '/api/kanban/board'
 const DEFAULT_FILE = join(homedir(), '.dsh', 'kanban', 'board.json')
-const DEFAULT_DISTRO = 'Ubuntu-22.04'
+const DEFAULT_ISSUE_EXAMPLE = 'ENG-123'
+/** Machine-specific settings, ignored by git; config.example.json shows the shape. */
+const LOCAL_CONFIG = fileURLToPath(new URL('./config.json', import.meta.url))
 const AUTO_TITLE_LENGTH = 60
 /** Built-in file-editing tools; an edit made through a shell command is not detected. */
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'apply_patch', 'edit', 'write'])
@@ -43,6 +47,28 @@ function provisionalTitle(text) {
   const line = text.replace(/\s+/g, ' ').trim()
   if (line === '') return '未命名会话'
   return line.length > AUTO_TITLE_LENGTH ? `${line.slice(0, AUTO_TITLE_LENGTH)}…` : line
+}
+
+/**
+ * Read the local config file; a missing file is an empty config.
+ * @returns the parsed object.
+ */
+export function readLocalConfig(file = LOCAL_CONFIG) {
+  let raw
+  try {
+    raw = readFileSync(file, 'utf8')
+  } catch (error) {
+    if (error?.code === 'ENOENT') return {}
+    throw error
+  }
+  const value = JSON.parse(raw)
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${file} must hold a JSON object`)
+  return value
+}
+
+/** A non-empty string setting, or undefined. */
+function textSetting(value) {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 }
 
 function parseArgs(raw) {
@@ -105,7 +131,7 @@ Your part — update without id targets this session's card:
 Add other cards only when the user asks. list omits done cards unless column is "done" or include_done is true.`
 
 const GATE_PARAM = { type: 'string', enum: ['human', 'auto'] }
-const TOOL_PARAMETERS = {
+const toolParameters = issueExample => ({
   type: 'object',
   properties: {
     action: { type: 'string', enum: ['list', 'add', 'update', 'remove', 'link'], description: 'Operation to perform.' },
@@ -115,7 +141,7 @@ const TOOL_PARAMETERS = {
     status: { type: 'string', description: 'Short current-progress phrase shown on the card; cleared when the card changes column.' },
     waiting: { type: 'boolean', description: 'true when you stopped and the user must act; cleared by the next turn.' },
     project: { type: 'string', description: 'Project or repository name; also a list filter.' },
-    issue: { type: 'string', description: 'Linear issue identifier such as ENG-123.' },
+    issue: { type: 'string', description: `Linear issue identifier such as ${issueExample}.` },
     issue_url: { type: 'string', description: 'Linear issue URL.' },
     pr: { type: 'string', description: 'GitHub pull request URL to attach.' },
     remove_pr: { type: 'string', description: 'GitHub pull request URL to detach.' },
@@ -129,7 +155,7 @@ const TOOL_PARAMETERS = {
   },
   required: ['action'],
   additionalProperties: false,
-}
+})
 
 /** Map tool arguments onto the shared operation input. Empty strings clear text fields. */
 function toolFields(input) {
@@ -150,10 +176,13 @@ function toolFields(input) {
 /**
  * Mount the board route, the `kanban` tool, automatic Session tracking, and GitHub polling.
  * @param ctx - Host plugin context injecting `connection` and `tools`.
- * @param config - optional `{ file, wslDistro }`.
+ * @param config - optional `{ file, wslDistro, issueExample }`; each field
+ *   falls back to the same field of config.json, then to its default.
  */
 export function apply(ctx, config) {
-  const store = new BoardStore(typeof config?.file === 'string' && config.file !== '' ? config.file : DEFAULT_FILE)
+  const local = readLocalConfig()
+  const setting = key => textSetting(config?.[key]) ?? textSetting(local[key])
+  const store = new BoardStore(setting('file') ?? DEFAULT_FILE)
   /** Sessions currently inside a turn. */
   const running = new Set()
   /** Per-Session state of the open turn: whether it edited files, and its tool calls by id. */
@@ -163,7 +192,7 @@ export function apply(ctx, config) {
   const poller = startGitHubPolling({
     store,
     logger: ctx.logger,
-    distro: typeof config?.wslDistro === 'string' && config.wslDistro !== '' ? config.wslDistro : DEFAULT_DISTRO,
+    distro: setting('wslDistro'),
     // YAML config cannot carry a function, so only an in-process test supplies this.
     ...(typeof config?.fetchPrs === 'function' ? { fetch: config.fetchPrs } : {}),
   })
@@ -344,7 +373,7 @@ export function apply(ctx, config) {
   ctx.tools.register({
     name: 'kanban',
     description: TOOL_DESCRIPTION,
-    parameters: TOOL_PARAMETERS,
+    parameters: toolParameters(setting('issueExample') ?? DEFAULT_ISSUE_EXAMPLE),
     output: {
       schema: { type: 'object' },
       render: (_args, value) => [{ type: 'text', text: value.text }],
