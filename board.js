@@ -73,6 +73,7 @@ function normalizeCard(raw) {
   }
   const card = { ...rest, column, sessions, prs, sources: strings(raw.sources), gates }
   delete card.pr
+  if (!isDueDate(card.dueDate)) delete card.dueDate
   card.movedAt ??= card.updatedAt ?? card.createdAt
   return card
 }
@@ -143,6 +144,12 @@ function textField(input, field, { required = false, limit = TEXT_LIMITS[field] 
   if (required && text === '') throw new BoardError('invalid_input', `${field} must not be empty`)
   if (text.length > limit) throw new BoardError('invalid_input', `${field} exceeds ${limit} characters`)
   return text
+}
+
+function isDueDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith('0000-')) return false
+  const time = Date.parse(`${value}T00:00:00Z`)
+  return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === value
 }
 
 function columnField(value, fallback) {
@@ -342,6 +349,9 @@ function applyFields(draft, card, input) {
     delete card.autoTitle
   }
   for (const field of ['project', 'note', 'status']) setOptional(card, field, textField(input, field))
+  const dueDate = textField(input, 'dueDate', { limit: 10 })
+  if (dueDate && !isDueDate(dueDate)) throw new BoardError('invalid_input', 'dueDate must be a valid YYYY-MM-DD date')
+  setOptional(card, 'dueDate', dueDate)
   const issue = textField(input, 'issue')
   setOptional(card, 'issue', issue)
   if (input.issueUrl !== undefined) setOptional(card, 'issueUrl', input.issueUrl === '' ? '' : urlField(input.issueUrl, 'issueUrl'))
@@ -368,7 +378,7 @@ function applyFields(draft, card, input) {
     const url = urlField(input.addSource, 'source')
     if (!card.sources.includes(url)) card.sources.push(url)
   }
-  if (card.autoCreated === true && (input.note !== undefined || input.issue !== undefined || input.addPr !== undefined || input.prs !== undefined)) {
+  if (card.autoCreated === true && (dueDate || input.note !== undefined || input.issue !== undefined || input.addPr !== undefined || input.prs !== undefined)) {
     // Content given by a person or agent makes the card worth keeping when its Session moves elsewhere.
     delete card.autoCreated
   }
