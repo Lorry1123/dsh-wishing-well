@@ -42,6 +42,8 @@ window.__ModuleLoader__.load({
       projectHelp: ['点项目名看完整看板，点待处理数字直达需要你处理的卡片。', 'Open a project to see its board, or select its count to see what needs you.'],
       needYou: ['待我处理', 'Needs me'], needCount: ['待我处理 {count}', 'Needs me {count}'],
       recentWork: ['近期更新', 'Recent updates'], recentUnread: ['未读', 'Unread'],
+      recentRunning: ['正在工作', 'Working'], recentApproval: ['等待审批', 'Waiting for approval'],
+      recentReview: ['等待方案评审', 'Waiting for plan review'], recentAnswer: ['等待回复', 'Waiting for answer'],
       workFeed: ['工作动态', 'Work activity'], loadRecentMore: ['加载更多', 'Load more'],
       recentDragHint: ['拖动调整位置；方向键移动，Home 复位', 'Drag or use arrow keys to move; Home to reset'],
       openBoard: ['打开许愿池', 'Open Wishing Well'],
@@ -118,8 +120,11 @@ window.__ModuleLoader__.load({
 .dk-recent-list li + li { border-top: 1px solid var(--dsw-alias-border-l2); }
 .dk-recent-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: start; gap: 7px; text-align: start; width: 100%; min-height: 48px; padding: 8px 6px; border: 0; border-radius: var(--dsw-radius-sm); background: none; }
 .dk-recent-title-line { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.dk-recent-unread { display: grid; place-items: center; min-height: 19px; }
-.dk-recent-unread > .dk-dot { width: 6px; height: 6px; }
+.dk-recent-status { display: grid; place-items: center; min-height: 19px; }
+.dk-recent-status > .dk-dot { width: 6px; height: 6px; }
+.dk-recent-running { box-sizing: border-box; width: 8px; height: 8px; border: 1px solid currentColor; border-inline-end-color: transparent; border-radius: 50%; color: var(--dsw-alias-state-business-primary); animation: dk-recent-spin .8s linear infinite; }
+@keyframes dk-recent-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .dk-recent-running { animation: none; } }
 .dk-recent-bridge { position: absolute; }
 .dk-recent-scroll { flex: 1; }
 .dk-recent-detail { min-width: 0; display: grid; gap: 2px; }
@@ -708,9 +713,16 @@ window.__ModuleLoader__.load({
           : h('ul', { className: 'dk-recent-list' }, ...selected.slice(0, limit).map(({ card, time }) => {
             const pr = card.prs.find(pr => pr.checks === 'failing') ?? card.prs.find(pr => pr.checks === 'pending') ?? card.prs.find(pr => pr.checks)
             const note = card.attention || card.status || (pr ? t(pr.checks) : '')
+            const id = sessionForCard(card)
+            const status = statuses?.get(id)
+            const pending = status?.pendingInteraction?.kind
+            const pendingLabel = pending === 'approval' ? 'recentApproval' : pending === 'plan-review' ? 'recentReview' : pending === 'question' ? 'recentAnswer' : null
+            const running = (status?.running ?? byId.get(id)?.running) === true ||
+              sessions?.projectionsBySession?.[id]?.values?.subagentCatalog?.some(child => (statuses?.get(child.id)?.running ?? sessions.byId?.[child.id]?.running) === true)
+            const label = pendingLabel || (running ? 'recentRunning' : status?.completionUnread === true ? 'recentUnread' : null)
+            const indicator = pendingLabel ? 'dk-dot dk-tone-warn' : running ? 'dk-recent-running' : 'dk-dot dk-tone-success'
             return h('li', { key: card.id }, h('button', { type: 'button', className: 'dk-recent-row', onClick: () => choose(card) },
-              h('span', { className: 'dk-recent-unread' },
-                statuses?.get(sessionForCard(card))?.completionUnread === true && h('span', { className: 'dk-dot dk-tone-success', role: 'img', title: t('recentUnread'), 'aria-label': t('recentUnread') })),
+              h('span', { className: 'dk-recent-status' }, label && h('span', { className: indicator, role: 'img', title: t(label), 'aria-label': t(label) })),
               h('span', { className: 'dk-recent-detail' }, h('span', { className: 'dk-recent-title-line' },
                 card.column !== 'done' && h('span', { className: `dk-badge dk-tone-${COLUMN_BY_ID[card.column].tone}` }, stageText(t, card.column)),
                 h('span', { className: 'dk-recent-title', title: card.title }, card.title)),

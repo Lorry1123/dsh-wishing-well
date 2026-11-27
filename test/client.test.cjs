@@ -208,7 +208,8 @@ const pageProps = withStore('main')
     ...Array.from({ length: 21 }, (_, i) => card({ id: `recent-${i}`, title: `测试工作 ${i}`, column: 'plan', attention: i % 2 ? '待检查' : undefined, updatedAt: iso(1000 + i) })),
   ]
   let visibleFeed = feedCards
-  const props = { ...slot.def.inject(), store: { ...fakeStore, getSnapshot: () => ({ ...snapshot, cards: visibleFeed }) }, useWorkspaces: select => select({ archivedSessionIds: ['s-release-main'] }), useSessionStatus: select => select(new Map([['s-release-secondary', { completionUnread: true }]])), openSession: id => opened.push(id) }
+  const statuses = new Map([['s-release-secondary', { completionUnread: true }]])
+  const props = { ...slot.def.inject(), store: { ...fakeStore, getSnapshot: () => ({ ...snapshot, cards: visibleFeed }) }, useWorkspaces: select => select({ archivedSessionIds: ['s-release-main'] }), useSessionStatus: select => select(statuses), openSession: id => opened.push(id) }
   const draw = () => render(React.createElement(slot.component, props), { RecentWork: [active, tab, limit, position, size, dragging] })
   const css = (tree, name) => one(find(tree, n => n.props.className === name), name)
   const trigger = tree => css(tree, 'dk-recent-trigger')
@@ -220,10 +221,17 @@ const pageProps = withStore('main')
   const [first, shipped, read] = rows(draw())
   const firstTitle = css(first, 'dk-recent-title-line')
   assert.equal(text(firstTitle), 'PR·CI等你合并的卡')
-  assert.equal(find(css(first, 'dk-recent-unread'), n => n.props['aria-label'] === '未读').length, 1)
+  const labels = row => find(css(row, 'dk-recent-status'), n => n.props.role === 'img').map(n => n.props['aria-label'])
+  assert.deepEqual(labels(first), ['未读'])
   assert.ok(text(shipped).includes('正式版 1.0'))
   assert.equal(text(shipped).includes('已上线'), false)
-  assert.equal(find(css(read, 'dk-recent-unread'), n => n.props['aria-label'] === '未读').length, 0)
+  assert.deepEqual(labels(read), [])
+  statuses.set('s-release-secondary', { running: true, completionUnread: true })
+  assert.deepEqual(labels(rows(draw())[0]), ['正在工作'])
+  statuses.set('s-release-secondary', { running: true, completionUnread: true, pendingInteraction: { kind: 'approval' } })
+  assert.deepEqual(labels(rows(draw())[0]), ['等待审批'])
+  statuses.set('s-release-secondary', { running: false, completionUnread: true })
+  assert.deepEqual(labels(rows(draw())[0]), ['未读'])
   const wide = css(draw(), 'dk-recent-panel').props.style
   assert.ok(wide.left === 48 || wide.left === -wide.width - 8)
   css(draw(), 'dk-recent-scroll').props.onScroll({ currentTarget: { scrollTop: 25, scrollHeight: 640, clientHeight: 150 } })
