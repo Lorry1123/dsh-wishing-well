@@ -115,6 +115,7 @@ function describeCard(card) {
   ].filter(Boolean).join(', ')
   const lines = [`[${COLUMN_LABELS[card.column]}] ${card.id} ${card.title}${extra ? ` (${extra})` : ''}`]
   if (card.status) lines.push(`    status: ${card.status}${card.waiting ? ' (waiting for user)' : ''}`)
+  if (card.dueDate) lines.push(`    due_date: ${card.dueDate}`)
   if (card.note) lines.push(`    note: ${card.note}`)
   return lines.join('\n')
 }
@@ -147,6 +148,7 @@ const toolParameters = issueExample => ({
     remove_pr: { type: 'string', description: 'GitHub pull request URL to detach.' },
     source: { type: 'string', description: 'Requirement source URL to add (Notion page, Slack thread, Claude artifact).' },
     note: { type: 'string', description: 'Short free-form note.' },
+    due_date: { type: 'string', description: 'Optional deadline for add/update, as YYYY-MM-DD. Use an empty string to clear it.' },
     plan_gate: { ...GATE_PARAM, description: 'human: the user reviews the plan; auto: adversarial subagent review suffices.' },
     local_gate: { ...GATE_PARAM, description: 'human: the user verifies locally before the PR; auto: skip local verification.' },
     merge_gate: { ...GATE_PARAM, description: 'human: the user checks before merging; auto: merge once CI and review pass.' },
@@ -163,6 +165,7 @@ function toolFields(input) {
   for (const field of ['title', 'column', 'status', 'waiting', 'project', 'issue', 'note']) {
     if (input[field] !== undefined) fields[field] = input[field]
   }
+  if (input.due_date !== undefined) fields.dueDate = input.due_date
   if (input.issue_url !== undefined) fields.issueUrl = input.issue_url
   if (input.pr !== undefined) fields.addPr = input.pr
   if (input.remove_pr !== undefined) fields.removePr = input.remove_pr

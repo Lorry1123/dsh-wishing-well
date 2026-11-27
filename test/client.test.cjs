@@ -289,6 +289,61 @@ assert.equal(one(find(prField, n => n.type === 'textarea'), 'PR URLs textarea').
 assert.deepEqual(find(form, n => n.type === 'select').map(n => n.props.value), ['human', 'human', 'auto'])
 assert.equal(buttons(form, '取消关联').length, 3)
 
+// Deadlines use the browser's calendar and do not replace the workflow status.
+{
+  const clock = { value: new Date(2026, 10, 27, 23, 59).getTime() }
+  const view = {}, detailState = {}, formFields = {}
+  const page = () => renderPage({ BoardPage: [clock, view, detailState], CardForm: [undefined, formFields] })
+  const deadline = '2026-11-30'
+  snapshot = { ...snapshot, cards: [
+    { ...cards[0], dueDate: deadline },
+    { ...cards[1], dueDate: '2026-12-01' },
+    { ...cards[2], dueDate: '2026-11-26' },
+    { ...cards[3], dueDate: '2026-11-26' },
+  ] }
+  const assertDue = (tree, title, date, label, tone) => {
+    const item = cardNamed(tree, title)
+    const time = one(find(item, n => n.type === 'time'), 'deadline label')
+    assert.equal(time.props.dateTime, date)
+    assert.equal(text(time), `${label}：${date}`)
+    assert.equal(item.props.className.match(/dk-due-(soon|overdue)/)?.[1], tone)
+  }
+  assertDue(page(), '修复登录', deadline, '即将截止', 'soon')
+  assertDue(page(), '导出报表', '2026-12-01', '截止', undefined)
+  assertDue(page(), '等你合并的卡', '2026-11-26', '已逾期', 'overdue')
+  containsText(cardNamed(page(), '等你合并的卡'), 'CI 失败')
+  historyButton(page(), 1).props.onClick()
+  assertDue(page(), '正式版 1.0', '2026-11-26', '截止', undefined)
+  clock.value = new Date(2026, 10, 28, 0, 0).getTime()
+  assertDue(page(), '导出报表', '2026-12-01', '即将截止', 'soon')
+  clock.value = new Date(2026, 10, 30, 23, 59).getTime()
+  assertDue(page(), '修复登录', deadline, '今天截止', 'soon')
+  clock.value = new Date(2026, 11, 1, 0, 0).getTime()
+  assertDue(page(), '修复登录', deadline, '已逾期', 'overdue')
+
+  const dueInput = drawer => one(find(drawer, n => n.type === 'input' && n.props.type === 'date'), 'date input')
+  const cardForm = () => one(find(dialog(page()), n => n.type === 'form'), 'deadline form')
+  button(cardNamed(page(), '修复登录'), '修复登录').props.onClick()
+  containsText(dialog(page()), `已逾期：${deadline}`)
+  button(dialog(page()), '编辑').props.onClick()
+  assert.equal(dueInput(cardForm()).props.value, deadline)
+  button(cardForm(), '清除截止日期').props.onClick()
+  assert.equal(dueInput(cardForm()).props.value, '')
+  cardForm().props.onSubmit({ preventDefault() {} })
+  assert.deepEqual(calls.mutate.at(-1), ['update', { id: 'k-1', dueDate: '' }])
+
+  button(page(), '新建愿望').props.onClick()
+  formFields.value = undefined
+  const newForm = cardForm()
+  assert.equal(dueInput(newForm).props.value, '')
+  one(find(newForm, n => n.type === 'input' && n.props.required), 'title input').props.onChange({ target: { value: '新愿望' } })
+  dueInput(newForm).props.onChange({ target: { value: deadline } })
+  cardForm().props.onSubmit({ preventDefault() {} })
+  assert.equal(calls.mutate.at(-1)[0], 'add')
+  assert.equal(calls.mutate.at(-1)[1].dueDate, deadline)
+  snapshot = { ...snapshot, cards }
+}
+
 const actionsPage = boardPage({ MoveStage: [{}], CardDetails: [{}] })
 const menuTrigger = tree => one(find(cardNamed(tree, '修复登录'), n => n.type === 'button' && n.props['aria-label'] === '更多操作：修复登录'), 'card menu trigger')
 const moveForm = tree => one(find(tree, n => n.type === 'form' && n.props.className === 'dk-move-form'), 'card move form')

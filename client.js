@@ -64,6 +64,11 @@ window.__ModuleLoader__.load({
       current: ['当前状态', 'Current status'], noStatus: ['暂无进展记录', 'No progress recorded'],
       running: ['AI 进行中', 'AI working'], backlog: ['待开工', 'Not started'], details: ['卡片详情', 'Card details'],
       editCard: ['编辑卡片', 'Edit card'], heading: ['标题（必填）', 'Title (required)'], note: ['备注', 'Notes'],
+      deadline: ['截止日期', 'Due date'], noDeadline: ['未设置', 'Not set'],
+      dueDateField: ['截止日期（选填）', 'Due date (optional)'], clearDueDate: ['清除截止日期', 'Clear due date'],
+      dueDateSaved: ['已保存截止日期', 'Due date saved'], dueDateCleared: ['已清除截止日期', 'Due date cleared'],
+      dueDate: ['截止：{date}', 'Due: {date}'], dueToday: ['今天截止：{date}', 'Due today: {date}'],
+      dueSoon: ['即将截止：{date}', 'Due soon: {date}'], overdue: ['已逾期：{date}', 'Overdue: {date}'],
       approval: ['审批设置', 'Checkpoints'], human: ['人工', 'Manual'], auto: ['AI 自己来', 'Agent handles it'],
       planGate: ['方案评审', 'Plan review'], localGate: ['本地验收', 'Local verification'], mergeGate: ['合并前检查', 'Pre-merge check'],
       prs: ['PR 链接，每行一个', 'PR URLs, one per line'], sources: ['需求来源链接，每行一个', 'Source URLs, one per line'],
@@ -139,6 +144,11 @@ window.__ModuleLoader__.load({
 .dk-empty { padding: 12px 5px; border: 1px dashed var(--dk-border); border-radius: var(--dsw-radius-md); color: var(--dk-subtle); font-size: 12px; text-align: center; }
 .dk-card { position: relative; flex: none; display: flex; flex-direction: column; min-width: 0; padding: 7px 10px 8px; background: var(--dsw-alias-bg-base); border: 1px solid var(--dk-border); border-radius: var(--dsw-radius-md); }
 .dk-card:hover, .dk-card:focus-within { border-color: var(--dsw-alias-border-l3); }
+.dk-card.dk-due-soon { border-inline-start-color: var(--dsw-alias-state-warn-primary); }
+.dk-card.dk-due-overdue { border-inline-start-color: var(--dsw-alias-state-error-primary); }
+.dk-due-field { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.dk-due-field > label { flex: 1 1 150px; }
+.dk-due-line { margin-top: 5px; }
 .dk-card-top, .dk-card-foot { justify-content: space-between; gap: 5px; }
 .dk-card-top { margin-bottom: 3px; }
 .dk-card-foot { border-top: 1px solid var(--dk-border); padding-top: 6px; margin-top: 8px; min-width: 0; font-size: 11px; }
@@ -199,7 +209,7 @@ window.__ModuleLoader__.load({
 .dk-work-links { gap: 6px 10px; flex-wrap: wrap; }
 .dk-gate-list { margin: 0; padding-inline-start: 18px; font-size: 12px; color: var(--dk-subtle); }
 .dk-form { display: flex; flex-direction: column; gap: 10px; }
-.dk-form > label, .dk-form-gates > label { display: grid; gap: 4px; color: var(--dk-subtle); font-size: 12px; }
+.dk-form > label, .dk-form-gates > label, .dk-due-field > label { display: grid; gap: 4px; color: var(--dk-subtle); font-size: 12px; }
 .dk-form-gates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .dk-form-gates .dk-select { min-width: 0; width: 100%; }
 .dk-form-row, .dk-form-session { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
@@ -499,7 +509,7 @@ window.__ModuleLoader__.load({
     }
 
     function CardForm({ t, initial, projects, sessions, projectHint, onSubmit, onCancel, onUnlink, creating, draftId }) {
-      const makeFields = value => Object.fromEntries(['title', 'project', 'issue', 'issueUrl', 'status', 'note'].map(key => [key, value[key] ?? '']))
+      const makeFields = value => Object.fromEntries(['title', 'project', 'issue', 'issueUrl', 'status', 'note', 'dueDate'].map(key => [key, value[key] ?? '']))
       const [base] = useState(() => ({
         ...makeFields(initial),
         prs: (initial.prs ?? []).map(pr => pr.url).join('\n'), sources: (initial.sources ?? []).join('\n'),
@@ -508,6 +518,7 @@ window.__ModuleLoader__.load({
       const [fields, setFields] = useState(base)
       const [busy, setBusy] = useState(false)
       const titleRef = useRef(null)
+      const dueDateRef = useRef(null)
       useEffect(() => { titleRef.current?.focus() }, [])
       const set = (key, value) => setFields(previous => ({ ...previous, [key]: value }))
       const submit = async event => {
@@ -531,6 +542,9 @@ window.__ModuleLoader__.load({
         field('project', t('projectField'), 80, false, { list: draftId }),
         h('datalist', { id: draftId }, projects.filter(project => project.explicit).map(project => h('option', { key: project.key, value: project.explicit }))),
         projectHint && h('p', { className: 'dk-detail-text' }, projectHint),
+        h('div', { className: 'dk-due-field' },
+          field('dueDate', t('dueDateField'), undefined, false, { type: 'date', min: '0001-01-01', max: '9999-12-31', ref: dueDateRef }),
+          fields.dueDate && h('button', { type: 'button', className: 'dk-btn', onClick: () => { set('dueDate', ''); dueDateRef.current?.focus() } }, t('clearDueDate'))),
         field('status', t('current'), 120), field('note', t('note'), 2000, true),
         field('issue', t('issue'), 40), field('issueUrl', `${t('issue')} URL`, 500),
         field('prs', t('prs'), undefined, true), field('sources', t('sources'), undefined, true),
@@ -572,15 +586,33 @@ window.__ModuleLoader__.load({
         h(Glyph, { name: pill.icon, size: 13 }), h('span', null, pill.label))
     }
 
+    function dueStatus(card, now) {
+      if (!card.dueDate || card.column === 'done') return undefined
+      const today = new Date(now)
+      // Compare calendar days, not elapsed hours across a daylight-saving change.
+      const day = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
+      const days = (Date.parse(`${card.dueDate}T00:00:00Z`) - day) / 86400000
+      return days < 0 ? 'overdue' : days === 0 ? 'dueToday' : days <= 3 ? 'dueSoon' : undefined
+    }
+
+    function DueDate({ t, date, status }) {
+      if (!date) return null
+      const tone = status === 'overdue' ? 'error' : status ? 'warn' : 'idle'
+      return h('time', { dateTime: date, className: `dk-status-pill dk-tone-${tone}` },
+        h(Glyph, { name: 'clock', size: 13 }), h('span', null, t(status ?? 'dueDate', { date })))
+    }
+
     function Card({ t, locale, card, now, project, showProject, sessions, dragging, dropBefore, menuOpen, onDragStart, onDragEnd, onDragOver, onDrop, onOpenSession, onDetail, onMenu, onStart }) {
       const session = sessions.findLast(item => item.available)
       const pill = cardPill(card, t)
       const canStart = card.column === 'todo' && card.sessions.length === 0
       const time = relativeTime(card.updatedAt, now, t, locale)
+      const due = dueStatus(card, now)
+      const dueClass = due === 'overdue' ? ' dk-due-overdue' : due ? ' dk-due-soon' : ''
       const pr = card.prs[0]
       const context = showProject ? projectText(t, project) : card.issue || (pr ? prLabel(pr) : '')
       return h('article', {
-        className: `dk-card${dragging ? ' dk-card-dragging' : ''}${dropBefore ? ' dk-card-drop' : ''}`,
+        className: `dk-card${dueClass}${dragging ? ' dk-card-dragging' : ''}${dropBefore ? ' dk-card-drop' : ''}`,
         draggable: true, onDragStart, onDragEnd, onDragOver, onDrop, 'aria-label': card.title,
       },
       h('div', { className: 'dk-card-top' },
@@ -588,6 +620,7 @@ window.__ModuleLoader__.load({
         h('button', { type: 'button', className: 'dk-icon-btn', title: t('more', { title: card.title }), 'aria-label': t('more', { title: card.title }), 'aria-expanded': menuOpen, onClick: onMenu }, h(Glyph, { name: 'more' }))),
       h('button', { type: 'button', className: 'dk-card-title', onClick: onDetail, title: card.title, 'data-dk-card-title': card.id }, h('span', null, card.title)),
       h('div', { className: 'dk-card-status' }, pill ? h(Pill, { pill }) : h('span', { className: 'dk-muted', title: card.status }, card.status || t(card.column === 'todo' ? 'backlog' : 'noStatus'))),
+      card.dueDate && h('div', { className: 'dk-due-line' }, h(DueDate, { t, date: card.dueDate, status: due })),
       h('div', { className: 'dk-card-foot' },
         h('span', { className: 'dk-muted', title: card.updatedAt }, showProject && pr ? `${prLabel(pr)} · ${time}` : time),
         canStart ? h('button', { type: 'button', className: 'dk-link', title: t('startHint'), onClick: onStart }, t('start'))
@@ -629,7 +662,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'dk-drawer-body' }, children))
     }
 
-    function CardDetails({ t, card, project, sessions, onOpenSession, onStart, onMove, onEdit, onRemove }) {
+    function CardDetails({ t, card, now, project, sessions, onOpenSession, onStart, onMove, onEdit, onRemove }) {
       const [confirm, setConfirm] = useState(false)
       const session = sessions.findLast(item => item.available)
       const pill = cardPill(card, t)
@@ -652,6 +685,8 @@ window.__ModuleLoader__.load({
           card.attention && pill?.label !== card.attention && h('p', { className: 'dk-detail-text' }, card.attention),
           card.status && card.status !== card.attention && card.status !== pill?.label && h('p', { className: 'dk-detail-text' }, card.status),
           !pill && !card.status && h('p', { className: 'dk-detail-text' }, t('noStatus')))),
+        section('deadline', card.dueDate ? h(DueDate, { t, date: card.dueDate, status: dueStatus(card, now) })
+          : h('p', { className: 'dk-detail-text' }, t('noDeadline'))),
         work.length > 0 && section('linkedWork', h('div', { className: 'dk-work-links' }, work)),
         card.note && section('note', h('p', { className: 'dk-detail-text' }, card.note)),
         section('approval', h('ul', { className: 'dk-gate-list' }, GATES.map(gate => h('li', { key: gate.id }, `${gateText(t, gate)} · ${t(card.gates?.[gate.id] === 'auto' ? 'auto' : 'human')}`)))),
@@ -933,7 +968,8 @@ window.__ModuleLoader__.load({
             onSubmit: async fields => {
               if (!creating && Object.keys(fields).length === 0) { openDetail(shown.id); return true }
               const ok = await run(creating ? 'add' : 'update', creating ? { ...fields, column: detail.column } : { ...fields, id: shown.id },
-                creating ? () => t('added', { project: fields.project || t('noProject'), stage: stageText(t, detail.column) }) : undefined)
+                creating ? () => t('added', { project: fields.project || t('noProject'), stage: stageText(t, detail.column) })
+                  : fields.dueDate !== undefined ? () => t(fields.dueDate ? 'dueDateSaved' : 'dueDateCleared') : undefined)
               if (!ok) return false
               if (creating) {
                 const addedProject = fields.project ? { key: `name:${fields.project.toLowerCase()}`, label: fields.project, explicit: fields.project } : { key: 'none' }
@@ -944,7 +980,7 @@ window.__ModuleLoader__.load({
               } else setDetail({ mode: 'view', id: shown.id })
               return true
             },
-          })) : shown ? h(CardDetails, { key: shown.id, t, card: shown, project: byCard.get(shown.id), sessions: shown.sessions.map(sessionInfo),
+          })) : shown ? h(CardDetails, { key: shown.id, t, card: shown, now, project: byCard.get(shown.id), sessions: shown.sessions.map(sessionInfo),
           onOpenSession: open, onStart: () => start(shown), onMove: column => moveTo(shown, column), onEdit: () => openDetail(shown.id, 'edit'),
           onRemove: async () => { if (await run('remove', { id: shown.id })) setDetail(null) },
         }) : h('p', null, t('missing')))

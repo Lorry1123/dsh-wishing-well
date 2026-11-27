@@ -76,6 +76,40 @@ assert.throws(() => readLocalConfig(join(dir, 'array.json')), /must hold a JSON 
   m.dispose()
 }
 
+// ---------- deadline CRUD shared by the board route and agent tool ----------
+{
+  const deadlineFile = join(dir, 'deadlines.json')
+  const m = mount(deadlineFile)
+  const added = await m.call('add', { title: 'Review by leap day', dueDate: '2028-02-29' })
+  assert.equal(added.status, 200)
+  const { id } = added.body.value.card
+  assert.equal(added.body.board.cards[0].dueDate, '2028-02-29')
+  const legacy = await m.call('add', { title: 'No deadline' })
+  assert.equal(Object.hasOwn(legacy.body.value.card, 'dueDate'), false)
+  for (const dueDate of ['2027-02-29', '2028-02-30', '2028-2-09', '0000-01-01', 20280229]) {
+    const invalid = await m.call('update', { id, dueDate, column: 'dev' })
+    assert.equal(invalid.status, 400)
+    assert.equal(invalid.body.error.code, 'invalid_input')
+  }
+  assert.equal((await m.board()).cards[0].column, 'todo')
+  assert.equal((await m.board()).cards[0].dueDate, '2028-02-29')
+  const moved = await m.call('update', { id, column: 'done' })
+  assert.equal(moved.body.value.card.dueDate, '2028-02-29')
+  await assert.rejects(() => m.run({ action: 'update', id, due_date: '2027-02-29' }), { code: 'invalid_input' })
+  await m.run({ action: 'update', id, due_date: '2028-03-01' })
+  const fromTool = await m.run({ action: 'add', title: 'Tool deadline', due_date: '2029-01-01', session: 'none' })
+  assert.equal(fromTool.card.dueDate, '2029-01-01')
+  assert.match((await m.run({ action: 'list', include_done: true })).text, /due_date: 2028-03-01/)
+  m.dispose()
+  const reopened = mount(deadlineFile)
+  assert.equal((await reopened.board()).cards.find(c => c.id === id).dueDate, '2028-03-01')
+  await reopened.run({ action: 'update', id, due_date: '' })
+  assert.equal(Object.hasOwn((await reopened.board()).cards.find(c => c.id === id), 'dueDate'), false)
+  const cleared = await reopened.call('update', { id: fromTool.card.id, dueDate: '' })
+  assert.equal(Object.hasOwn(cleared.body.value.card, 'dueDate'), false)
+  reopened.dispose()
+}
+
 // ---------- automatic lifecycle from Session events ----------
 const file = join(dir, 'board.json')
 const prAnswers = new Map()
