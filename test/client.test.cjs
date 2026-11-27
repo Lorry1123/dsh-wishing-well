@@ -355,7 +355,35 @@ const showDetails = (page, title) => {
   button(cardNamed(page.render(), title), title).props.onClick()
   return dialog(page.render())
 }
-containsText(showDetails(boardPage(), '导出报表'), '写单测中')
+// Dismissal closes the drawer without navigating or changing the board.
+const dismissPage = boardPage()
+const dismissDetail = showDetails(dismissPage, '导出报表')
+containsText(dismissDetail, '写单测中')
+const beforeDismiss = [calls.open.length, calls.mutate.length]
+button(dismissDetail, '关闭抽屉').props.onClick()
+assert.equal(find(dismissPage.render(), n => n.type === 'dialog').length, 0)
+cardNamed(dismissPage.render(), '导出报表')
+let cancelPrevented = false
+showDetails(dismissPage, '导出报表').props.onCancel({ preventDefault() { cancelPrevented = true } })
+assert.equal(cancelPrevented, true)
+assert.equal(find(dismissPage.render(), n => n.type === 'dialog').length, 0)
+const backdropDetail = showDetails(dismissPage, '导出报表')
+const drawerElement = { getBoundingClientRect: () => ({ left: 220, right: 670, top: 40, bottom: 600 }) }
+const pointerAt = (clientX, target = drawerElement) => ({ currentTarget: drawerElement, target, clientX, clientY: 100, isPrimary: true, button: 0, detail: 1 })
+for (const [start, end] of [[pointerAt(300), pointerAt(300)], [pointerAt(300, {}), pointerAt(100)], [pointerAt(100), pointerAt(300)]]) {
+  backdropDetail.props.onPointerDown(start)
+  backdropDetail.props.onClick(end)
+  dialog(dismissPage.render())
+}
+backdropDetail.props.onPointerDown(pointerAt(100))
+backdropDetail.props.onPointerCancel(pointerAt(100))
+backdropDetail.props.onClick(pointerAt(100))
+dialog(dismissPage.render())
+backdropDetail.props.onPointerDown(pointerAt(100))
+backdropDetail.props.onClick(pointerAt(100))
+assert.equal(find(dismissPage.render(), n => n.type === 'dialog').length, 0)
+cardNamed(dismissPage.render(), '导出报表')
+assert.deepEqual([calls.open.length, calls.mutate.length], beforeDismiss)
 const detailsPage = boardPage()
 const detail = showDetails(detailsPage, '等你合并的卡')
 for (const label of ['可以合并，等你检查', 'G 4/5', 'G 3/5 旧', '合并前复核回归结果',
@@ -377,7 +405,10 @@ for (const [url, label] of [[cards[2].prs[0].url, 'web-app#42'], [cards[2].prs[1
 assert.ok(!text(attentionCard).includes(cards[2].note))
 assert.ok(!text(attentionCard).includes('发布补充会话'))
 button(showDetails(detailsPage, '等你合并的卡'), '编辑').props.onClick()
-const form = one(find(dialog(detailsPage.render()), n => n.type === 'form'), 'card form')
+const editingDetail = dialog(detailsPage.render())
+editingDetail.props.onPointerDown(pointerAt(100))
+editingDetail.props.onClick(pointerAt(100))
+const form = one(find(dialog(detailsPage.render()), n => n.type === 'form'), 'card form stays open after an outside click')
 const prField = one(find(form, n => n.type === 'label' && text(n) === 'PR 链接，每行一个'), 'PR URLs field')
 assert.equal(one(find(prField, n => n.type === 'textarea'), 'PR URLs textarea').props.value, cards[2].prs.map(pr => pr.url).join('\n'))
 assert.deepEqual(find(form, n => n.type === 'select').map(n => n.props.value), ['human', 'human', 'auto'])

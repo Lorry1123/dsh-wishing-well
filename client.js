@@ -76,7 +76,7 @@ window.__ModuleLoader__.load({
       approval: ['审批设置', 'Checkpoints'], human: ['人工', 'Manual'], auto: ['AI 自己来', 'Agent handles it'],
       planGate: ['方案评审', 'Plan review'], localGate: ['本地验收', 'Local verification'], mergeGate: ['合并前检查', 'Pre-merge check'],
       prs: ['PR 链接，每行一个', 'PR URLs, one per line'], sources: ['需求来源链接，每行一个', 'Source URLs, one per line'],
-      save: ['保存', 'Save'], add: ['添加卡片', 'Add card'], cancel: ['取消', 'Cancel'], close: ['关闭', 'Close'],
+      save: ['保存', 'Save'], add: ['添加卡片', 'Add card'], cancel: ['取消', 'Cancel'], closeDrawer: ['关闭抽屉', 'Close drawer'],
       remove: ['删除卡片', 'Delete card'], confirmRemove: ['确认删除', 'Confirm deletion'],
       removeHint: ['该卡片和关联会话的自动跟踪将被移除。会话本身不会删除。', 'This removes the card and stops tracking its linked sessions. The sessions themselves are not deleted.'],
       missing: ['卡片已不在看板上', 'The card is no longer on the board'],
@@ -243,7 +243,8 @@ window.__ModuleLoader__.load({
 .dk-phase-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--dk-subtle); font-size: 11px; }
 .dk-phase-legend > span { white-space: nowrap; }
 .dk-phase-legend .dk-dot { width: 5px; height: 5px; margin-inline-end: 4px; vertical-align: 1px; }
-.dk-drawer { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(450px, 100%); max-width: none; height: 100%; height: 100dvh; max-height: none; padding: 0; overflow: auto; background: var(--dsw-alias-bg-base); color: inherit; border: 0; border-inline-start: 1px solid var(--dk-border); }
+.dk-drawer, .dk-drawer::backdrop { inset-block-start: var(--dsh-frame-chrome-top, var(--dsh-frame-top-clearance, 0px)); }
+.dk-drawer { position: fixed; inset-inline: auto 0; inset-block-end: 0; margin: 0; box-sizing: border-box; width: min(450px, 100%); max-width: none; height: auto; max-height: none; padding: 0; overflow: auto; background: var(--dsw-alias-bg-base); color: inherit; border: 0; border-inline-start: 1px solid var(--dk-border); }
 .dk-drawer::backdrop { background: color-mix(in srgb, var(--dsw-alias-bg-base) 56%, transparent); }
 .dk-drawer-head { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 20px; color: var(--dk-subtle); border-bottom: 1px solid var(--dk-border); background: var(--dsw-alias-bg-base); }
 .dk-drawer-body { padding: 17px 20px 24px; }
@@ -760,7 +761,7 @@ window.__ModuleLoader__.load({
         wish: 'M7 1.5Q8 7 13.5 8Q8 9 7 14.5Q6 9 .5 8Q6 7 7 1.5ZM13 1v4m-2-2h4',
         board: 'M2 2.5h12v11H2zM6 2.5v11m4-11v11',
         folder: 'M2 4a1 1 0 0 1 1-1h3l1.5 2H13a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z',
-        plus: 'M8 3v10M3 8h10', close: 'M4 4l8 8m0-8-8 8', more: 'M3 8h.01M8 8h.01M13 8h.01',
+        plus: 'M8 3v10M3 8h10', more: 'M3 8h.01M8 8h.01M13 8h.01',
         chat: 'M13.5 7.5A5.5 5.5 0 0 1 8 13H2l1.35-2.5A5.5 5.5 0 1 1 13.5 7.5z',
         jump: 'M3 4h10M3 8h7m-7 4h4', history: 'M2.5 8A5.5 5.5 0 1 1 4 12m-2-7v3h3m3-3v3l2 1',
         alert: 'M8 14a6 6 0 1 0 0-12 6 6 0 0 0 0 12Zm0-9v3m0 2.5h.01',
@@ -910,17 +911,35 @@ window.__ModuleLoader__.load({
         h('button', { type: 'submit', className: 'dk-btn', disabled: busy || target === column }, t('moveConfirm')))
     }
 
-    function Drawer({ t, title, onClose, children }) {
+    function Drawer({ t, title, dismissOnBackdrop, onClose, children }) {
       const ref = useRef(null)
+      const pressedBackdrop = useRef(false)
       useEffect(() => {
         const dialog = ref.current
         if (!dialog?.isConnected) return undefined
         dialog.showModal()
         return () => { if (dialog.open) dialog.close() }
       }, [])
-      return h('dialog', { className: 'dk-drawer', ref, 'aria-label': title, onCancel: event => { event.preventDefault(); onClose() } },
+      // The browser retargets ::backdrop events to the dialog itself.
+      const isBackdrop = event => {
+        if (event.target !== event.currentTarget) return false
+        const { left, top, right, bottom } = event.currentTarget.getBoundingClientRect()
+        const { clientX, clientY } = event
+        return clientX < left || clientX >= right || clientY < top || clientY >= bottom
+      }
+      return h('dialog', {
+        className: 'dk-drawer', ref, 'aria-label': title,
+        onPointerDown: event => { if (event.isPrimary) pressedBackdrop.current = event.button === 0 && isBackdrop(event) },
+        onPointerCancel: event => { if (event.isPrimary) pressedBackdrop.current = false },
+        onClick: event => {
+          const dismiss = dismissOnBackdrop && pressedBackdrop.current && event.detail > 0 && isBackdrop(event)
+          pressedBackdrop.current = false
+          if (dismiss) onClose()
+        },
+        onCancel: event => { event.preventDefault(); onClose() },
+      },
         h('div', { className: 'dk-drawer-head' }, title,
-          h('button', { type: 'button', className: 'dk-icon-btn', title: t('close'), 'aria-label': t('close'), onClick: onClose }, h(Glyph, { name: 'close' }))),
+          h('button', { type: 'button', className: 'dk-btn', onClick: onClose }, t('closeDrawer'))),
         h('div', { className: 'dk-drawer-body' }, children))
     }
 
@@ -1217,7 +1236,10 @@ window.__ModuleLoader__.load({
       const creating = detail?.mode === 'new'
       const editing = detail?.mode === 'edit'
       const newProject = view.view === 'board' ? project : undefined
-      const drawer = detail && h(Drawer, { t, title: t(creating ? 'newCard' : editing ? 'editCard' : 'details'), onClose: closeDetail },
+      const drawer = detail && h(Drawer, {
+         t, title: t(creating ? 'newCard' : editing ? 'editCard' : 'details'),
+         dismissOnBackdrop: !creating && !editing, onClose: closeDetail,
+       },
         notice && h('div', { className: `dk-drawer-notice${notice.failed ? ' dk-problem' : ''}`, role: 'status' }, notice.text),
         creating || (editing && shown) ? h(React.Fragment, null,
           h('h2', null, creating ? stageText(t, detail.column) : shown.title),
