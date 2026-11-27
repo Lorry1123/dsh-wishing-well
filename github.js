@@ -141,14 +141,17 @@ export function startGitHubPolling({ store, logger, distro, fetch = fetchPrs, on
         let any = false
         for (const card of draft.cards) {
           let touched = false
+          let progressed = false
           for (const pr of card.prs) {
             if (!urls.includes(pr.url)) continue
             const state = byKey.get(prKey(pr))
+            if (state && ['state', 'checks', 'score', 'scoreCommit', 'scoreStale'].some(key => key in state && pr[key] !== state[key])) progressed = true
             Object.assign(pr, state ?? {}, { polledAt })
             touched = true
           }
           if (touched) {
             any = true
+            if (progressed) card.prProgressAt = polledAt
             advanceFromPrs(card, polledAt)
           }
         }

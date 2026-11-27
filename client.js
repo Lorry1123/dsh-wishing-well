@@ -41,6 +41,10 @@ window.__ModuleLoader__.load({
       projectOverview: ['项目总览', 'Projects overview'],
       projectHelp: ['点项目名看完整看板，点待处理数字直达需要你处理的卡片。', 'Open a project to see its board, or select its count to see what needs you.'],
       needYou: ['待我处理', 'Needs me'], needCount: ['待我处理 {count}', 'Needs me {count}'],
+      recentWork: ['近期更新', 'Recent updates'], recentUnread: ['未读', 'Unread'],
+      workFeed: ['工作动态', 'Work activity'], loadRecentMore: ['加载更多', 'Load more'],
+      recentDragHint: ['拖动调整位置；方向键移动，Home 复位', 'Drag or use arrow keys to move; Home to reset'],
+      openBoard: ['打开许愿池', 'Open Wishing Well'],
       projectNeed: ['{name}：查看 {count} 项待我处理', '{name}: view {count} items that need you'],
       incomplete: ['未完成', 'Open'], incompleteCount: ['{count} 项未完成', '{count} open'],
       breakdown: ['阶段分布 · 未完成', 'Breakdown of open items'], noOpen: ['暂无未完成事项', 'No open items'],
@@ -92,6 +96,47 @@ window.__ModuleLoader__.load({
     const gateText = (t, gate) => t(`${gate.id}Gate`)
 
     const CSS = `
+.dk-recent { position: absolute; inset: 0; color: var(--dsw-alias-label-primary); font: 13px/1.45 var(--dsw-font-family); }
+.dk-recent-anchor { position: absolute; width: 40px; height: 40px; pointer-events: auto; }
+.dk-recent button { font: inherit; color: inherit; cursor: pointer; }
+.dk-recent button:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }
+.dk-recent .dk-recent-trigger { position: relative; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; cursor: grab; touch-action: none; user-select: none; color: var(--dsw-alias-state-business-primary); background: var(--dsw-alias-bg-base); border: 1px solid var(--dsw-alias-border-l2); border-radius: 50%; box-shadow: 0 3px 12px var(--dsw-alias-border-l2); }
+.dk-recent .dk-recent-trigger[data-dragging=true] { cursor: grabbing; }
+.dk-recent-count { position: absolute; top: -3px; right: -5px; min-width: 14px; padding: 1px 4px; font-size: 10px; line-height: 14px; color: var(--dsw-alias-state-warn-label); background: var(--dsw-alias-state-warn-tertiary); border-radius: 99px; font-variant-numeric: tabular-nums; }
+.dk-recent-trigger:hover, .dk-recent-trigger[aria-expanded=true] { background: var(--dsw-alias-interactive-bg-hover); }
+.dk-recent-panel { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--dsw-alias-bg-base); border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-lg); box-shadow: 0 10px 36px var(--dsw-alias-border-l2); }
+.dk-recent-head { padding: 13px 15px 9px; flex: none; }
+.dk-recent-eyebrow { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.dk-recent-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.dk-recent-heading strong { font-size: 17px; font-weight: 680; }
+.dk-recent-tabs { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; margin: 0 12px 8px; padding: 3px; border: 1px solid var(--dsw-alias-border-l2); border-radius: var(--dsw-radius-md); }
+.dk-recent-tabs button { display: flex; gap: 5px; align-items: center; justify-content: center; border: 0; padding: 4px; min-width: 0; background: none; border-radius: var(--dsw-radius-sm); color: var(--dsw-alias-label-secondary); }
+.dk-recent-tabs button[aria-pressed=true] { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); font-weight: 650; }
+.dk-recent-tab-count { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-state-warn-label); }
+.dk-recent-scroll { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; border-top: 1px solid var(--dsw-alias-border-l2); }
+.dk-recent-list { list-style: none; margin: 0; padding: 3px 7px 5px; }
+.dk-recent-list li + li { border-top: 1px solid var(--dsw-alias-border-l2); }
+.dk-recent-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: start; gap: 7px; text-align: start; width: 100%; min-height: 48px; padding: 8px 6px; border: 0; border-radius: var(--dsw-radius-sm); background: none; }
+.dk-recent-title-line { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.dk-recent-unread { display: grid; place-items: center; min-height: 19px; }
+.dk-recent-unread > .dk-dot { width: 6px; height: 6px; }
+.dk-recent-bridge { position: absolute; }
+.dk-recent-scroll { flex: 1; }
+.dk-recent-detail { min-width: 0; display: grid; gap: 2px; }
+.dk-recent-row:hover, .dk-recent-link:hover, .dk-recent-load:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.dk-recent-title, .dk-recent-meta, .dk-recent-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-recent-title { font-weight: 650; }
+.dk-recent-meta, .dk-recent-note, .dk-recent-time { font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.dk-recent-time { white-space: nowrap; color: var(--dsw-alias-label-tertiary); }
+.dk-recent-note.dk-recent-attention { color: var(--dsw-alias-state-warn-label); }
+.dk-recent .dk-recent-link, .dk-recent .dk-recent-load { background: none; border: 0; border-radius: var(--dsw-radius-sm); padding: 4px 6px; color: var(--dsw-alias-state-business-primary); font-size: 12px; }
+.dk-recent .dk-recent-load { display: block; margin: 3px auto 8px; }
+.dk-recent-empty { padding: 12px; text-align: center; color: var(--dsw-alias-label-secondary); }
+.dk-recent-panel[data-compact=true] .dk-recent-eyebrow { display: none; }
+.dk-recent-panel[data-compact=true] .dk-recent-head { padding: 3px 8px; }
+.dk-recent-panel[data-compact=true] .dk-recent-heading strong { font-size: 13px; }
+.dk-recent-panel[data-compact=true] .dk-recent-tabs { margin: 0 6px 3px; padding: 1px; }
+.dk-recent-panel[data-compact=true] .dk-recent-tabs button { padding: 2px; }
 .dk-page { --dk-border: var(--dsw-alias-border-l2); --dk-subtle: var(--dsw-alias-label-secondary); --dk-tray: var(--dsw-alias-interactive-bg-hover); --dk-accent: var(--dsw-alias-state-business-primary); height: 100%; min-height: 0; position: relative; display: flex; flex-direction: column; container-type: inline-size; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: 14px/1.5 var(--dsw-font-family); }
 .dk-page button, .dk-page input, .dk-page textarea, .dk-page select { font-family: inherit; }
 .dk-page :is(button, select, input, textarea, summary, a, section):focus-visible { outline: 2px solid var(--dk-accent); outline-offset: 2px; }
@@ -461,6 +506,220 @@ window.__ModuleLoader__.load({
       return now
     }
 
+    const noWorkspaceSnapshot = () => undefined
+    const recentPositionKey = 'wishing-well.recent-position.v1'
+    const recentDefaultPosition = { x: .36, y: .78 }
+    const recentStep = 10
+    const clamp = (n, min, max) => Math.max(min, Math.min(n, max))
+
+    function readRecentPosition() {
+      try {
+        const point = JSON.parse(window.localStorage.getItem(recentPositionKey))
+        if (Number.isFinite(point?.x) && Number.isFinite(point?.y)) return { x: clamp(point.x, 0, 1), y: clamp(point.y, 0, 1) }
+      } catch { /* Storage is optional. */ }
+      return recentDefaultPosition
+    }
+
+    function RecentWork({ store, useSessionList, useTranslate, useWorkspaces = noWorkspaceSnapshot, useSessionStatus = noWorkspaceSnapshot, openSession, openBoard }) {
+      const board = useBoard(store)
+      const sessions = useSessionList()
+      const archived = useWorkspaces(state => state.archivedSessionIds)
+      const statuses = useSessionStatus(state => state)
+      const { t, locale } = useTranslate()
+      const [active, setActive] = useState(null)
+      const [tab, setTab] = useState('recent')
+      const [limit, setLimit] = useState(recentStep)
+      const [position, setPosition] = useState(readRecentPosition)
+      const [size, setSize] = useState(null)
+      const [dragging, setDragging] = useState(false)
+      const timer = useRef(null), root = useRef(null), surface = useRef(null), trigger = useRef(null), gesture = useRef(null), suppressClick = useRef(false)
+      const panelId = React.useId()
+      const now = useNow(30000)
+      const clear = () => clearTimeout(timer.current)
+      const close = () => { clear(); setActive(null) }
+      const remember = point => {
+        setPosition(point)
+        try { window.localStorage.setItem(recentPositionKey, JSON.stringify(point)) } catch { /* Storage is optional. */ }
+      }
+      useEffect(() => {
+        const element = root.current
+        const frame = element?.closest('[data-shell-overlay]')?.parentElement
+        // Use the main outlet's allocated box, not private CSS class names or guessed sidebar widths.
+        const main = frame?.querySelector('[data-slot="main"]')?.parentElement
+        const measure = () => {
+          if (!main || frame.hasAttribute('data-rightbar-fullscreen') || main.closest('[inert]')) {
+            clearTimeout(timer.current)
+            gesture.current = null
+            setDragging(false)
+            setSize(null)
+            setActive(null)
+            return
+          }
+          const base = element.getBoundingClientRect(), bounds = main.getBoundingClientRect()
+          const left = Math.max(0, bounds.left - base.left), top = Math.max(0, bounds.top - base.top)
+          const width = Math.min(base.right, bounds.right) - base.left - left
+          const height = Math.min(base.bottom, bounds.bottom) - base.top - top
+          setSize(width >= 64 && height >= 64 ? { left, top, width, height } : null)
+        }
+        measure()
+        const observer = new ResizeObserver(measure)
+        if (element) observer.observe(element)
+        if (main) observer.observe(main)
+        const layoutObserver = new MutationObserver(measure)
+        if (frame) layoutObserver.observe(frame, { attributes: true, attributeFilter: ['data-rightbar-fullscreen', 'data-sidebar-collapsed', 'inert'], subtree: true })
+        return () => { observer.disconnect(); layoutObserver.disconnect(); clearTimeout(timer.current) }
+      }, [])
+      useEffect(() => {
+        if (active === null) return
+        const outside = event => { if (!surface.current?.contains(event.target)) close() }
+        const escape = event => {
+          if (event.key !== 'Escape') return
+          if (surface.current?.contains(event.target)) {
+            event.preventDefault()
+            event.stopPropagation()
+            trigger.current?.focus()
+          }
+          close()
+        }
+        document.addEventListener('pointerdown', outside, true)
+        document.addEventListener('keydown', escape, true)
+        return () => {
+          document.removeEventListener('pointerdown', outside, true)
+          document.removeEventListener('keydown', escape, true)
+        }
+      }, [active])
+      const byId = useMemo(() => new Map((sessions?.ids ?? []).map(id => [id, sessions.byId?.[id]])), [sessions])
+      const progressAt = card => [card.updatedAt, card.prProgressAt, card.createdAt].filter(value => typeof value === 'string').sort().at(-1) ?? ''
+      const ordered = useMemo(() => board.cards.map(card => ({ card, time: progressAt(card) }))
+        .sort((a, b) => b.time.localeCompare(a.time) || a.card.id.localeCompare(b.card.id)), [board.cards])
+      const attention = useMemo(() => ordered.filter(({ card }) => card.attention), [ordered])
+      const selected = tab === 'attention' ? attention : ordered
+      const expanded = active !== null
+      const hasMore = selected.length > limit
+      const grow = () => setLimit(n => Math.min(n + recentStep, selected.length))
+      const open = mode => { setLimit(recentStep); setActive(mode) }
+      const archivedIds = new Set(archived)
+      const sessionForCard = card => archived && card.sessions.findLast(id => byId.get(id) && !archivedIds.has(id))
+      function choose(card) {
+        const id = sessionForCard(card)
+        close()
+        if (id !== undefined) openSession(id)
+        else openBoard()
+      }
+      if (!size) return h('div', { className: 'dk-recent', ref: root, style: { pointerEvents: 'none' } })
+      const travelX = Math.max(0, size.width - 64)
+      const travelY = Math.max(0, size.height - 64)
+      const x = 12 + position.x * travelX, y = 12 + position.y * travelY
+      const above = y >= size.height - y - 40
+      const gap = 8
+      const verticalRoom = (above ? y : size.height - y - 40) - 12 - gap
+      const rightRoom = size.width - x - 52 - gap, leftRoom = x - 12 - gap
+      const right = rightRoom >= leftRoom
+      const horizontalRoom = Math.max(rightRoom, leftRoom)
+      const sideways = horizontalRoom >= (verticalRoom >= 190 ? 280 : 220)
+      const width = Math.min(360, Math.max(1, sideways ? horizontalRoom : size.width - 24))
+      const fillSide = sideways && verticalRoom < 150
+      const height = Math.max(1, Math.min(400, fillSide ? size.height - 24 : verticalRoom + (sideways ? 40 : 0)))
+      const panelX = sideways ? (right ? 40 + gap : -width - gap) : clamp(x + 20 - width / 2, 12, size.width - width - 12) - x
+      const panelY = fillSide ? { top: 12 - y } : above ? { bottom: sideways ? 0 : 40 + gap } : { top: sideways ? 0 : 40 + gap }
+      const bridge = sideways
+        ? { left: right ? 40 : -gap, top: 0, width: gap, height: 40 }
+        : { left: 0, top: above ? -gap : 40, width: 40, height: gap }
+      function move(event) {
+        const drag = gesture.current
+        if (!drag || drag.id !== event.pointerId) return
+        const dx = event.clientX - drag.x, dy = event.clientY - drag.y
+        if (!drag.point && Math.hypot(dx, dy) < 6) return
+        if (!drag.point) { close(); setDragging(true); suppressClick.current = true }
+        drag.point = { x: clamp(drag.start.x + dx / drag.width, 0, 1), y: clamp(drag.start.y + dy / drag.height, 0, 1) }
+        setPosition(drag.point)
+      }
+      function finish(event, cancelled = false) {
+        const drag = gesture.current
+        if (!drag || drag.id !== event.pointerId) return
+        gesture.current = null
+        if (!drag.point) return
+        setDragging(false)
+        if (cancelled) setPosition(drag.start)
+        else remember(drag.point)
+      }
+      function moveByKey(event) {
+        const dirs = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
+        const dir = dirs[event.key]
+        if (!dir && event.key !== 'Home') return
+        event.preventDefault()
+        event.stopPropagation()
+        close()
+        remember(dir ? { x: clamp(position.x + dir[0] * 24 / Math.max(1, travelX), 0, 1), y: clamp(position.y + dir[1] * 24 / Math.max(1, travelY), 0, 1) } : recentDefaultPosition)
+      }
+      const waiting = attention.length
+      return h('div', { className: 'dk-recent', ref: root, style: { pointerEvents: 'none' } },
+        h('div', { className: 'dk-recent-anchor', ref: surface, style: { left: (size.left ?? 0) + x, top: (size.top ?? 0) + y },
+          onPointerEnter: event => {
+            if (event.pointerType !== 'mouse' || gesture.current) return
+            clear()
+            if (!expanded && height >= 90) timer.current = setTimeout(() => open('hover'), 240)
+          },
+          onPointerLeave: event => {
+            if (event.pointerType !== 'mouse' || gesture.current) return
+            clear()
+            if (active === 'hover' && !event.currentTarget.contains(document.activeElement)) timer.current = setTimeout(close, 230)
+          },
+          onBlur: event => { if (expanded && !event.currentTarget.contains(event.relatedTarget)) close() },
+        }, h('button', { type: 'button', className: 'dk-recent-trigger', ref: trigger, 'data-dragging': dragging || undefined,
+          title: t('recentDragHint'), 'aria-label': waiting ? `${t('recentWork')} · ${t('needCount', { count: waiting })}` : t('recentWork'),
+          'aria-expanded': expanded, 'aria-controls': expanded ? panelId : undefined,
+          onPointerDown: event => {
+            if (event.button !== 0 || !event.isPrimary) return
+            clear()
+            suppressClick.current = false
+            gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, width: Math.max(1, travelX), height: Math.max(1, travelY), start: position }
+            event.currentTarget.setPointerCapture(event.pointerId)
+          },
+          onPointerMove: move, onPointerUp: event => finish(event), onPointerCancel: event => finish(event, true), onLostPointerCapture: event => finish(event, true),
+          onKeyDown: moveByKey,
+          onClick: event => {
+            if (event.detail !== 0 && suppressClick.current) { suppressClick.current = false; return }
+            clear()
+            if (height < 90) { close(); openBoard(); return }
+            if (active === 'click') close()
+            else if (active === 'hover') setActive('click')
+            else open('click')
+          },
+        }, h(WishingIcon, { size: 19 }),
+        waiting > 0 && h('span', { className: 'dk-recent-count', 'aria-hidden': true }, waiting > 99 ? '99+' : waiting)),
+        expanded && h('span', { className: 'dk-recent-bridge', 'aria-hidden': true, style: bridge, onPointerDown: close }),
+        expanded && h('section', { id: panelId, className: 'dk-recent-panel', 'data-compact': height < 150 || undefined, 'aria-label': t('recentWork'), style: {
+          left: panelX, width, height, maxHeight: height, ...panelY,
+        } },
+        h('header', { className: 'dk-recent-head' }, h('span', { className: 'dk-recent-eyebrow' }, t('title')),
+          h('div', { className: 'dk-recent-heading' }, h('strong', null, t('workFeed')), h('button', { type: 'button', className: 'dk-recent-link', onClick: () => { close(); openBoard() } }, t('openBoard')))),
+        h('div', { className: 'dk-recent-tabs', role: 'group', 'aria-label': t('workFeed') },
+          ...['recent', 'attention'].map(key => h('button', { key, type: 'button', 'aria-pressed': tab === key,
+            onClick: () => { if (tab !== key) { setTab(key); setLimit(recentStep) } } },
+          t(key === 'attention' ? 'needYou' : 'recentWork'), key === 'attention' && h('span', { className: 'dk-recent-tab-count' }, waiting)))),
+        h('div', { key: tab, className: 'dk-recent-scroll', onScroll: event => {
+          const { scrollHeight, scrollTop, clientHeight } = event.currentTarget
+          if (tab === 'attention' && hasMore && scrollHeight - scrollTop - clientHeight <= 40) grow()
+        } },
+        selected.length === 0 ? h('p', { className: 'dk-recent-empty', role: 'status' },
+          board.status === 'loading' ? t('loading') : board.status === 'error' ? board.error : t(tab === 'attention' ? 'noAttention' : 'empty'))
+          : h('ul', { className: 'dk-recent-list' }, ...selected.slice(0, limit).map(({ card, time }) => {
+            const pr = card.prs.find(pr => pr.checks === 'failing') ?? card.prs.find(pr => pr.checks === 'pending') ?? card.prs.find(pr => pr.checks)
+            const note = card.attention || card.status || (pr ? t(pr.checks) : '')
+            return h('li', { key: card.id }, h('button', { type: 'button', className: 'dk-recent-row', onClick: () => choose(card) },
+              h('span', { className: 'dk-recent-unread' },
+                statuses?.get(sessionForCard(card))?.completionUnread === true && h('span', { className: 'dk-dot dk-tone-success', role: 'img', title: t('recentUnread'), 'aria-label': t('recentUnread') })),
+              h('span', { className: 'dk-recent-detail' }, h('span', { className: 'dk-recent-title-line' },
+                card.column !== 'done' && h('span', { className: `dk-badge dk-tone-${COLUMN_BY_ID[card.column].tone}` }, stageText(t, card.column)),
+                h('span', { className: 'dk-recent-title', title: card.title }, card.title)),
+                h('span', { className: 'dk-recent-meta' }, projectText(t, projectFor(card, byId))),
+                note && h('span', { className: `dk-recent-note${card.attention ? ' dk-recent-attention' : ''}`, title: note }, note)),
+              h('time', { className: 'dk-recent-time', dateTime: time, title: time }, relativeTime(time, now, t, locale))))
+          })),
+        hasMore && h('button', { type: 'button', className: 'dk-recent-load', onClick: grow }, t('loadRecentMore'))))))
+    }
+
     function lines(text) {
       return text.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
     }
@@ -473,23 +732,26 @@ window.__ModuleLoader__.load({
     }
 
     /** Colored sparkle cluster: the wish pool. The gradient id is per instance, since the rail can render twice. */
-    function PanelIcon({ size, store }) {
-      const board = useBoard(store)
+    function WishingIcon({ size }) {
       const gradientId = `dk-wish-${React.useId().replace(/[^A-Za-z0-9_-]/g, '')}`
-      const waiting = board.cards.filter(card => card.attention).length
       const edge = size || 16
       const sparkle = (cx, cy, r, paint) => h('path', {
         d: sparklePath(cx, cy, r), fill: paint, stroke: paint, strokeWidth: 0.7, strokeLinejoin: 'round',
       })
-      return h('span', { className: 'dk-nav-icon' },
-        h('svg', { width: edge, height: edge, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
+      return h('svg', { width: edge, height: edge, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
           h('defs', null,
             h('linearGradient', { id: gradientId, x1: 2, y1: 2, x2: 14, y2: 14, gradientUnits: 'userSpaceOnUse' },
               h('stop', { stopColor: '#9b7bf0' }),
               h('stop', { offset: 1, stopColor: '#e06fb4' }))),
           sparkle(6.4, 9.2, 5.3, `url(#${gradientId})`),
           sparkle(12.4, 3.6, 2.7, '#e0a43a'),
-          sparkle(12.9, 12.4, 1.7, '#9b7bf0')),
+          sparkle(12.9, 12.4, 1.7, '#9b7bf0'))
+    }
+
+    function PanelIcon({ size, store }) {
+      const board = useBoard(store)
+      const waiting = board.cards.filter(card => card.attention).length
+      return h('span', { className: 'dk-nav-icon' }, h(WishingIcon, { size }),
         waiting > 0 && h('span', { className: 'dk-nav-count', title: `${waiting} 项等你处理` }, waiting > 9 ? '9+' : String(waiting)))
     }
 
@@ -1171,7 +1433,7 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots', 'uiWorkspace', 'sessions', 'contextMenus', 'locale'],
+      inject: ['slots', 'uiWorkspace', 'sessions', 'contextMenus', 'locale', 'layout'],
       apply(ctx) {
         const store = createBoardStore()
         const disposeLocale = ctx.locale.register(LOCALE_NS, boardDictionaries)
@@ -1205,6 +1467,10 @@ window.__ModuleLoader__.load({
         }
         const shared = () => ({ store })
 
+        ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+          name: 'shell.overlay', id: 'kanban.recent-work',
+          inject: () => ({ store, useSessionList, useTranslate, openSession, openBoard: () => ctx.layout.selectPanel(PANEL_ID) }),
+        }, RecentWork))
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
           name: 'sidebar.panellist', id: PANEL_ID, order: 20, label: '许愿池', inject: shared,
         }, PanelIcon))

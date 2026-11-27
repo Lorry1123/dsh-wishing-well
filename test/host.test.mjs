@@ -229,6 +229,24 @@ const pr = board.cards.find(other => other.id === cardId).prs[0]
 assert.equal(pr.checks, 'pending', 'replacing the list keeps polled state for the same PR')
 const poller = startGitHubPolling({ store: { read: async () => ({ cards: [] }), mutate: async () => {} }, logger: { warn() {} }, distro: 'x', fetch: async () => [] })
 poller.dispose()
+const watched = prCard([{ url: prUrl, repo: 'acme/api-server', number: 42, state: 'OPEN', checks: 'pending' }])
+let remoteChecks = [{ s: 'IN_PROGRESS' }]
+const recentPoller = startGitHubPolling({
+  store: { read: async () => ({ cards: [watched] }), mutate: async fn => fn({ cards: [watched] }) },
+  logger: { warn(message) { throw new Error(message) } },
+  fetch: async () => [{ url: prUrl, state: 'OPEN', checks: remoteChecks }],
+})
+try {
+  await recentPoller.tick()
+  assert.ok(watched.prs[0].polledAt)
+  assert.equal(watched.prProgressAt, undefined)
+  delete watched.prs[0].polledAt
+  remoteChecks = [{ s: 'COMPLETED', c: 'SUCCESS' }]
+  await recentPoller.tick()
+  assert.equal(watched.prs[0].checks, 'passing')
+  assert.equal(watched.prProgressAt, watched.prs[0].polledAt)
+  assert.equal(watched.updatedAt, now)
+} finally { recentPoller.dispose() }
 merged.dispose()
 k.dispose()
 

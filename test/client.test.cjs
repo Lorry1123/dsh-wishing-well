@@ -83,7 +83,7 @@ vm.createContext(sandbox)
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'client.js'), 'utf8'), sandbox, { filename: 'client.js' })
 assert.equal(factoryModule.id, '@local/dsh-wishing-well')
 const plugin = factoryModule.exports
-assert.deepEqual([...plugin.inject].sort(), ['contextMenus', 'locale', 'sessions', 'slots', 'uiWorkspace'])
+assert.deepEqual([...plugin.inject].sort(), ['contextMenus', 'layout', 'locale', 'sessions', 'slots', 'uiWorkspace'])
 
 const registered = {}
 const effects = []
@@ -168,7 +168,7 @@ const ctx = {
 }
 plugin.apply(ctx)
 assert.ok([...plugin.inject].includes('contextMenus'))
-assert.deepEqual(Object.keys(registered).sort(), ['main', 'sidebar.panellist', 'sidebar.session.row.hover', 'sidebar.session.row.trailing'])
+assert.deepEqual(Object.keys(registered).sort(), ['main', 'shell.overlay', 'sidebar.panellist', 'sidebar.session.row.hover', 'sidebar.session.row.trailing'])
 assert.equal(menuContributions.length, 1)
 assert.equal(menuContributions[0].target, 'session')
 // Placement among the built-in Session contributions of ui-workspace and
@@ -196,6 +196,100 @@ for (const key of ['kanban.menu.add', 'kanban.menu.move', 'kanban.menu.remove'])
 assert.equal(registered['sidebar.panellist'].def.label, '许愿池')
 const withStore = name => ({ ...registered[name].def.inject(), store: fakeStore })
 const pageProps = withStore('main')
+
+// The floating work feed paginates each view and moves without activating it.
+{
+  const slot = registered['shell.overlay']
+  const active = {}, tab = {}, limit = {}, position = {}, size = { value: { left: 250, top: 20, width: 800, height: 600 } }, dragging = {}
+  const opened = [], stored = new Map()
+  sandbox.window.localStorage = { getItem: key => stored.get(key), setItem: (key, value) => stored.set(key, value) }
+  const feedCards = [
+    ...cards.map(c => c.id === 'k-3' ? { ...c, prProgressAt: iso(0) } : c),
+    ...Array.from({ length: 21 }, (_, i) => card({ id: `recent-${i}`, title: `测试工作 ${i}`, column: 'plan', attention: i % 2 ? '待检查' : undefined, updatedAt: iso(1000 + i) })),
+  ]
+  let visibleFeed = feedCards
+  const props = { ...slot.def.inject(), store: { ...fakeStore, getSnapshot: () => ({ ...snapshot, cards: visibleFeed }) }, useWorkspaces: select => select({ archivedSessionIds: ['s-release-main'] }), useSessionStatus: select => select(new Map([['s-release-secondary', { completionUnread: true }]])), openSession: id => opened.push(id) }
+  const draw = () => render(React.createElement(slot.component, props), { RecentWork: [active, tab, limit, position, size, dragging] })
+  const css = (tree, name) => one(find(tree, n => n.props.className === name), name)
+  const trigger = tree => css(tree, 'dk-recent-trigger')
+  const rows = tree => find(tree, n => n.props.className === 'dk-recent-row')
+  const selectAttention = tree => one(find(tree, n => n.type === 'button' && text(n).startsWith('待我处理') && n.props['aria-pressed'] !== undefined), 'needs me filter')
+  assert.equal(rows(draw()).length, 0)
+  trigger(draw()).props.onClick({ detail: 1 })
+  assert.equal(rows(draw()).length, 10)
+  const [first, shipped, read] = rows(draw())
+  const firstTitle = css(first, 'dk-recent-title-line')
+  assert.equal(text(firstTitle), 'PR·CI等你合并的卡')
+  assert.equal(find(css(first, 'dk-recent-unread'), n => n.props['aria-label'] === '未读').length, 1)
+  assert.ok(text(shipped).includes('正式版 1.0'))
+  assert.equal(text(shipped).includes('已上线'), false)
+  assert.equal(find(css(read, 'dk-recent-unread'), n => n.props['aria-label'] === '未读').length, 0)
+  const wide = css(draw(), 'dk-recent-panel').props.style
+  assert.ok(wide.left === 48 || wide.left === -wide.width - 8)
+  css(draw(), 'dk-recent-scroll').props.onScroll({ currentTarget: { scrollTop: 25, scrollHeight: 640, clientHeight: 150 } })
+  assert.equal(rows(draw()).length, 10)
+  css(draw(), 'dk-recent-scroll').props.onScroll({ currentTarget: { scrollTop: 480, scrollHeight: 640, clientHeight: 150 } })
+  assert.equal(rows(draw()).length, 10)
+  one(buttons(draw(), '加载更多'), 'first load more').props.onClick()
+  assert.equal(rows(draw()).length, 20)
+  one(buttons(draw(), '加载更多'), 'load more').props.onClick()
+  assert.equal(rows(draw()).length, 25)
+  selectAttention(draw()).props.onClick()
+  assert.equal(css(draw(), 'dk-recent-panel').props.style.height, wide.height)
+  assert.equal(css(draw(), 'dk-recent-bridge').props.style.width, 8)
+  assert.equal(find(trigger(draw()), n => n.type === 'path').length, 3)
+  assert.equal(rows(draw()).length, 10)
+  one(buttons(draw(), '加载更多'), 'load more attention').props.onClick()
+  assert.equal(rows(draw()).length, 11)
+  assert.ok(rows(draw()).every(row => text(row).includes('待检查') || text(row).includes('可以合并')))
+  visibleFeed = feedCards.slice(0, 4)
+  assert.equal(rows(draw()).length, 1)
+  assert.equal(css(draw(), 'dk-recent-panel').props.style.height, wide.height)
+  rows(draw())[0].props.onClick()
+  assert.deepEqual(opened, ['s-release-secondary'])
+  assert.equal(rows(draw()).length, 0)
+  const initial = css(draw(), 'dk-recent-anchor').props.style
+  const grabbed = trigger(draw()).props
+  const event = { button: 0, isPrimary: true, pointerId: 3, clientX: 300, clientY: 250, currentTarget: { setPointerCapture(id) { assert.equal(id, 3) } } }
+  grabbed.onPointerDown(event)
+  grabbed.onPointerMove({ ...event, clientX: 304 })
+  assert.equal(dragging.value, undefined)
+  grabbed.onPointerMove({ ...event, clientX: -900, clientY: 230 })
+  assert.equal(dragging.value, true)
+  grabbed.onPointerUp(event)
+  grabbed.onClick({ detail: 1 })
+  assert.equal(rows(draw()).length, 0)
+  assert.equal(css(draw(), 'dk-recent-anchor').props.style.left, 262)
+  assert.ok(css(draw(), 'dk-recent-anchor').props.style.top < initial.top)
+  assert.equal(JSON.parse([...stored.values()][0]).x, 0)
+  const reloaded = render(React.createElement(slot.component, props), { RecentWork: [undefined, undefined, undefined, undefined, size] })
+  assert.equal(css(reloaded, 'dk-recent-anchor').props.style.left, 262)
+  trigger(draw()).props.onKeyDown({ key: 'Home', preventDefault() {}, stopPropagation() {} })
+  assert.deepEqual(css(draw(), 'dk-recent-anchor').props.style, initial)
+  size.value = { width: 320, height: 310 }
+  position.value = { x: 1, y: 1 }
+  trigger(draw()).props.onClick({ detail: 0 })
+  const narrow = draw()
+  const anchor = css(narrow, 'dk-recent-anchor').props.style
+  const panel = css(narrow, 'dk-recent-panel').props.style
+  assert.ok(anchor.left + 40 <= 320 && anchor.top + 40 <= 310)
+  assert.ok(anchor.left + panel.left >= 12 && anchor.left + panel.left + panel.width <= 308)
+  assert.ok(panel.bottom && panel.maxHeight < anchor.top)
+  const cancelDrag = trigger(narrow).props
+  cancelDrag.onPointerDown(event)
+  cancelDrag.onPointerMove({ ...event, clientX: 180, clientY: 120 })
+  assert.ok(position.value.x < 1)
+  cancelDrag.onPointerCancel(event)
+  assert.deepEqual(position.value, { x: 1, y: 1 })
+  assert.equal(rows(draw()).length, 0)
+  size.value = { width: 800, height: 240 }
+  position.value = { x: 0.5, y: 0.5 }
+  trigger(draw()).props.onClick({ detail: 0 })
+  const sideways = css(draw(), 'dk-recent-panel').props.style
+  assert.ok(sideways.left === 48 || sideways.left === -sideways.width - 8)
+  assert.equal(sideways.maxHeight, 216)
+  delete sandbox.window.localStorage
+}
 
 function one(nodes, description) {
   assert.equal(nodes.length, 1, `expected one ${description}`)
